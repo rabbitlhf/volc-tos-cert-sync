@@ -1,0 +1,37 @@
+[project]
+name = "volc_tos_cert_sync"
+version = "0.1.0"
+authors = [
+    { name = "Fundy", email = "rabbitlhf@gmail.com" }
+]
+description = "火山引擎TOS证书同步工具 - 自动同步本地证书到火山引擎证书中心并绑定到TOS自定义域名"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.8"
+keywords = ["volcengine", "tos", "certificate", "sync"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Topic :: Utilities"
+]
+
+# 运行依赖
+dependencies = [
+    "pyOpenSSL>=23.0.0",
+    "volcengine-python-sdk>=5.0.13",
+    "tos>=v2.9.0"
+]
+
+[project.optional-dependencies]
+# 开发依赖
+dev = [
+    "pytest>=7.0.0",
+    "black>=24.0.0",
+    "flake8>=7.0.0",
+    "pytest-cov>=4.0.0"
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"

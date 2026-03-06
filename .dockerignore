@@ -1,0 +1,40 @@
+# Python 字节码/缓存
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 虚拟环境
+venv/
+.env/
+.venv/
+env/
+
+# 构建产物
+dist/
+build/
+*.egg-info/
+
+# IDE 配置
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 日志/临时文件
+logs/
+*.log
+tmp/
+
+# Git 相关
+.git/
+.gitignore
+
+# Docker 自身文件
+Dockerfile
+.dockerignore
+
+# 开发依赖
+requirements-dev.txt

@@ -1,0 +1,4 @@
+pyOpenSSL>=23.0.0
+volcengine-python-sdk>=5.0.13
+tos>=v2.9.0
+cryptography>=42.0.0
