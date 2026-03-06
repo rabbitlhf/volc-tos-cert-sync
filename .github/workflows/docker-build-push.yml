@@ -73,17 +73,19 @@ jobs:
           cache-from: type=gha  # 缓存构建层，加速后续构建
           cache-to: type=gha,mode=max
 
-      # 步骤7：创建 GitHub Release（打标签时触发）
+      # 步骤7：创建 GitHub Release（仅合法 tag 触发时执行）
       - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/v') && contains(github.ref, '.')  # 仅匹配 vX.Y.Z 格式标签
         uses: softprops/action-gh-release@v2
         with:
-          # 发布描述
+          # 强制使用 tag 名作为 Release 标题，避免空值
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
           body: |
             ## 版本更新
-            - 自动构建 Docker 镜像：${{ secrets.DOCKER_HUB_USERNAME }}/volc-tos-cert-sync:${{ github.ref_name }}
-            - 镜像同时推送至 GitHub Packages：ghcr.io/${{ github.actor }}/volc-tos-cert-sync:${{ github.ref_name }}
-          files: |
-            LICENSE
+            - Docker 镜像：${{ secrets.DOCKER_HUB_USERNAME }}/volc-tos-cert-sync:${{ github.ref_name }}
+            - GitHub Packages 镜像：ghcr.io/${{ github.actor }}/volc-tos-cert-sync:${{ github.ref_name }}
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
