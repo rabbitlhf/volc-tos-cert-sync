@@ -21,6 +21,8 @@ jobs:
       # 步骤1：拉取代码
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 拉取所有历史，确保能获取 tag 信息
 
       # 步骤2：设置 Docker Buildx（支持多架构构建）
       - name: Set up Docker Buildx
