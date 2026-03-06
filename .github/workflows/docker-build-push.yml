@@ -6,7 +6,6 @@ name: Build and Push Docker Image
 # 3. 手动触发
 on:
   push:
-    branches: [ main ]
     tags: [ 'v*' ]  # 匹配 v0.1.0、v1.0.0 等标签
   workflow_dispatch:  # 手动触发
 
