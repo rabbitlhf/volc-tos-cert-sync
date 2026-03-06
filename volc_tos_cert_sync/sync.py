@@ -31,7 +31,7 @@ import tos
 from tos.models2 import CustomDomainRule
 
 from .config import Config
-from .utils import send_wecom_alert, read_cert_and_calc_fingerprint, read_private_key
+from .utils import send_wecom_alert, read_cert_and_calc_fingerprint, read_private_key, get_cert_validity_info
 
 
 def init_volc_clients():
@@ -223,6 +223,31 @@ def update_tos_domain_cert(tos_client, instance_id: str):
         raise Exception(f"更新 TOS 域名证书异常：{str(e)}")
 
 
+def should_sync_cert() -> bool:
+    """
+    判断是否执行同步：
+    - 若CERT_THRESHOLD_DAYS为None → 执行同步；
+    - 若为数字 → 剩余天数≤阈值时执行同步；
+    """
+    if Config.CERT_THRESHOLD_DAYS is None:
+        print("ℹ️  CERT_THRESHOLD_DAYS未配置，执行同步")
+        return True
+
+    threshold = int(Config.CERT_THRESHOLD_DAYS)
+
+    _, days_total, days_remaining = get_cert_validity_info()
+    if days_remaining is None:
+        print("⚠️  证书有效期解析失败，跳过同步")
+        return False
+
+    if days_remaining <= threshold:
+        print(f"✅ 证书有效期{days_total}天，剩余{days_remaining}天≤阈值{threshold}天，执行同步")
+        return True
+    else:
+        print(f"ℹ️  证书有效期{days_total}天，剩余{days_remaining}天>阈值{threshold}天，跳过同步")
+        return False
+
+
 def sync_certificate() -> None:
     """
     核心同步逻辑 - 完整的证书同步流程
@@ -239,41 +264,45 @@ def sync_certificate() -> None:
     print(log_content)
 
     try:
-        # 1. 配置验证
-        print("\n===== 1. 配置验证 =====")
+        # 配置验证
+        print("\n===== 配置验证 =====")
         is_valid, config_msg = Config.validate()
         if not is_valid:
             raise Exception(config_msg)
         print(f"✅ {config_msg}")
 
-        # 2. 初始化客户端
-        print("\n===== 2. 初始化火山引擎客户端 =====")
+        # 根据阈值天数配置判断是否执行同步
+        if not should_sync_cert():
+            return
+
+        # 初始化客户端
+        print("\n===== 初始化火山引擎客户端 =====")
         cert_api, cert_runtime_options, tos_client = init_volc_clients()
         print("✅ 客户端初始化完成")
 
-        # 3. 检查 TOS Bucket
-        print("\n===== 3. 检查 TOS Bucket =====")
+        # 检查 TOS Bucket
+        print("\n===== 检查 TOS Bucket =====")
         if not check_tos_bucket(tos_client):
             raise Exception("TOS Bucket 校验失败，流程终止")
 
-        # 4. 读取证书和私钥
-        print("\n===== 4. 读取证书并计算指纹 =====")
+        # 读取证书和私钥
+        print("\n===== 读取证书并计算指纹 =====")
         cert_content, cert_fingerprint = read_cert_and_calc_fingerprint()
         key_content = read_private_key()
 
-        # 5. 查询匹配证书
-        print("\n===== 5. 查询火山证书中心 =====")
+        # 查询匹配证书
+        print("\n===== 查询火山证书中心 =====")
         matched_cert_id = get_matched_cert_id(cert_api, cert_runtime_options, cert_fingerprint)
 
-        # 6. 上传新证书（如果需要）
+        # 上传新证书（如果需要）
         if not matched_cert_id:
-            print("\n===== 6. 上传新证书 =====")
+            print("\n===== 上传新证书 =====")
             matched_cert_id = upload_new_cert(cert_api, cert_runtime_options, cert_content, key_content)
         else:
-            print("\n===== 6. 证书已存在，无需上传 =====")
+            print("\n===== 证书已存在，无需上传 =====")
 
-        # 7. 更新 TOS 域名证书
-        print("\n===== 7. 更新 TOS 域名证书绑定 =====")
+        # 更新 TOS 域名证书
+        print("\n===== 更新 TOS 域名证书绑定 =====")
         update_tos_domain_cert(tos_client, matched_cert_id)
 
         # 执行成功

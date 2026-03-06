@@ -26,6 +26,7 @@ class Config:
     # 证书文件路径
     CERT_CRT_PATH = os.getenv("CERT_CRT_PATH", "/etc/cert/tls.crt")
     CERT_KEY_PATH = os.getenv("CERT_KEY_PATH", "/etc/cert/tls.key")
+    CERT_THRESHOLD_DAYS = os.getenv("CERT_THRESHOLD_DAYS", None)
 
     # 火山引擎基础配置
     VOLC_REGION = os.getenv("VOLC_REGION", "cn-guangzhou")
@@ -56,5 +57,13 @@ class Config:
             return False, f"证书文件不存在：{cls.CERT_CRT_PATH}"
         if not os.path.exists(cls.CERT_KEY_PATH):
             return False, f"私钥文件不存在：{cls.CERT_KEY_PATH}"
+        if cls.CERT_THRESHOLD_DAYS is not None:
+            try:
+                # 转换为整数并校验是否为非负（天数不能为负数）
+                threshold = int(cls.CERT_THRESHOLD_DAYS)
+                if threshold < 0:
+                    return False, f"CERT_THRESHOLD_DAYS 不能为负数：{cls.CERT_THRESHOLD_DAYS}"
+            except ValueError:
+                return False, f"CERT_THRESHOLD_DAYS 格式错误（需为整数或空）：{cls.CERT_THRESHOLD_DAYS}"
 
         return True, "配置验证通过"

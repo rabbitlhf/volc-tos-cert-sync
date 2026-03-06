@@ -47,6 +47,7 @@ export VOLC_REGION="cn-guangzhou"
 export VOLC_PROJECT="Production"
 export CERT_CRT_PATH="/etc/cert/tls.crt"
 export CERT_KEY_PATH="/etc/cert/tls.key"
+export CERT_THRESHOLD_DAYS=10
 export WECOM_WEBHOOK="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx"
 
 # 运行工具

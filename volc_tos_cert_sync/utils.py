@@ -44,7 +44,7 @@ def send_wecom_alert(title: str, content: str, level: str = "info") -> None:
         else:
             msg_content = f"✅ {title}\n{content}"
 
-        cert_info = get_cert_validity_info()
+        cert_info, _, _  = get_cert_validity_info()
         msg_content += cert_info
 
         data = {
@@ -108,7 +108,7 @@ def read_private_key() -> str:
         raise Exception(f"读取私钥失败：{str(e)}")
 
 
-def get_cert_validity_info() -> str:
+def get_cert_validity_info() -> Tuple[str, int| None, int | None]:
     """
     解析证书有效期，返回格式化的文本信息（适配企业微信text消息）
     :return: 有效期文本，示例：
@@ -139,6 +139,8 @@ def get_cert_validity_info() -> str:
         # 计算剩余天数
         now = datetime.datetime.now(tz)
         expire_time = cert.not_valid_after_utc.astimezone(tz)
+        # 证书总计有效期
+        days_total = (expire_time - cert.not_valid_before_utc.astimezone(tz)).days
         days_remaining = (expire_time - now).days
         status = "✅ 正常" if days_remaining >= 0 else "❌ 已过期"
 
@@ -150,7 +152,7 @@ def get_cert_validity_info() -> str:
 - 剩余天数：{days_remaining}天
 - 状态：{status}"""
 
-        return validity_info
+        return validity_info, days_total, days_remaining
 
     except Exception as e:
-        return f"\n📅 证书有效期：解析失败 - {str(e)}"
+        return f"\n📅 证书有效期：解析失败 - {str(e)}", None, None
