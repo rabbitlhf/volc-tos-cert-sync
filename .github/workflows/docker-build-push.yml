@@ -75,6 +75,27 @@ jobs:
           cache-from: type=gha  # 缓存构建层，加速后续构建
           cache-to: type=gha,mode=max
 
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # 获取当前 tag
+          CURRENT_TAG=${{ github.ref_name }}
+          # 获取上一个 tag（按语义化版本排序，取倒数第二个）
+          PREV_TAG=$(git tag --sort=-v:refname | grep -E "^v[0-9]+\.[0-9]+\.[0-9]+$" | sed -n '2p')
+          
+          if [ -z "$PREV_TAG" ]; then
+            # 首次发布，没有上一个 tag，直接列出所有提交
+            CHANGELOG=$(git log --pretty="- %s (%h)" $CURRENT_TAG)
+          else
+            # 生成从 PREV_TAG 到 CURRENT_TAG 的提交列表
+            CHANGELOG=$(git log --pretty="- %s (%h)" $PREV_TAG..$CURRENT_TAG)
+          fi
+          
+          # 把变更日志写入 GITHUB_OUTPUT，供后续步骤使用
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
       # 步骤7：创建 GitHub Release（仅合法 tag 触发时执行）
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v') && contains(github.ref, '.')  # 仅匹配 vX.Y.Z 格式标签
