@@ -1,6 +1,6 @@
 [project]
 name = "volc_tos_cert_sync"
-version = "1.0.1"
+version = "1.1.0"
 authors = [
     { name = "Fundy", email = "rabbitlhf@gmail.com" }
 ]
@@ -20,8 +20,12 @@ classifiers = [
 dependencies = [
     "pyOpenSSL>=23.0.0",
     "volcengine-python-sdk>=5.0.13",
-    "tos>=v2.9.0"
+    "tos>=v2.9.0",
+    "python-dateutil>=2.8.2"
 ]
+
+[project.scripts]
+volc-tos-cert-sync = "volc_tos_cert_sync.cli:main"
 
 [project.optional-dependencies]
 # 开发依赖

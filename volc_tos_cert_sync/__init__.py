@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright 2026 Your Name
+# Copyright 2026 Fundy Liu
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,6 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-__version__ = "1.0.1"
+__version__ = "1.1.0"
 __author__ = "Fundy"
 __email__ = "rabbitlhf@gmail.com"

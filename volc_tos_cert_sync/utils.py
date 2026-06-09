@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright 2026 Your Name
+# Copyright 2026 Fundy Liu
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -156,3 +156,23 @@ def get_cert_validity_info() -> Tuple[str, int| None, int | None]:
 
     except Exception as e:
         return f"\n📅 证书有效期：解析失败 - {str(e)}", None, None
+
+
+def get_local_cert_expire_time() -> datetime.datetime:
+    """
+    读取并解析本地证书，返回其带有时区（UTC+8）的过期时间
+    """
+    cert_path = Config.CERT_CRT_PATH
+    if not os.path.exists(cert_path):
+        raise FileNotFoundError(f"证书文件不存在：{cert_path}")
+    with open(cert_path, "rb") as f:
+        cert_data = f.read()
+    cert = x509.load_pem_x509_certificate(cert_data, default_backend())
+    tz = datetime.timezone(datetime.timedelta(hours=8))
+    # 兼容新老版本 cryptography，新版本有 not_valid_after_utc
+    if hasattr(cert, 'not_valid_after_utc'):
+        return cert.not_valid_after_utc.astimezone(tz)
+    else:
+        # 兜底旧版本
+        return cert.not_valid_after.replace(tzinfo=datetime.timezone.utc).astimezone(tz)
+

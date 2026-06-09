@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright 2026 Your Name
+# Copyright 2026 Fundy Liu
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,7 +17,8 @@
 """
 
 import datetime
-from typing import Optional
+from typing import Optional, Tuple
+import dateutil.parser
 
 import volcenginesdkcore
 from volcenginesdkcore.configuration import Configuration
@@ -31,7 +32,7 @@ import tos
 from tos.models2 import CustomDomainRule
 
 from .config import Config
-from .utils import send_wecom_alert, read_cert_and_calc_fingerprint, read_private_key, get_cert_validity_info
+from .utils import send_wecom_alert, read_cert_and_calc_fingerprint, read_private_key, get_cert_validity_info, get_local_cert_expire_time
 
 
 def init_volc_clients():
@@ -223,28 +224,91 @@ def update_tos_domain_cert(tos_client, instance_id: str):
         raise Exception(f"更新 TOS 域名证书异常：{str(e)}")
 
 
-def should_sync_cert() -> bool:
+def get_online_domain_cert_info(tos_client, cert_api, runtime_options) -> Tuple[Optional[str], Optional[datetime.datetime], Optional[int]]:
+    """
+    获取目标域名当前绑定的证书信息
+    :return: (证书InstanceId, 过期时间, 剩余天数)
+    """
+    try:
+        # 1. 获取 TOS 绑定的自定义域名列表
+        out = tos_client.list_bucket_custom_domain(Config.TOS_BUCKET)
+        cert_id = None
+        for rule in getattr(out, 'rules', []):
+            domain = getattr(rule, 'domain', None)
+            if domain == Config.CUSTOM_DOMAIN:
+                cert_id = getattr(rule, 'cert_id', None)
+                break
+
+        if not cert_id:
+            print(f"ℹ️  TOS 桶 {Config.TOS_BUCKET} 上未找到自定义域名 {Config.CUSTOM_DOMAIN} 绑定的证书ID")
+            return None, None, None
+
+        # 2. 查询火山引擎证书中心，获取该证书 ID 详情
+        from volcenginesdkcertificateservice.models.certificate_get_instance_request import CertificateGetInstanceRequest
+        detail_request = CertificateGetInstanceRequest(
+            instance_id=cert_id,
+            project_name=Config.VOLC_PROJECT,
+            _configuration=runtime_options
+        )
+        detail_resp = cert_api.certificate_get_instance(detail_request)
+
+        # 3. 提取过期时间属性并解析
+        not_after_str = getattr(detail_resp, 'not_after', None)
+        if not not_after_str:
+            print(f"⚠️  获取到证书 {cert_id} 详情，但未包含 NotAfter 过期时间属性")
+            return cert_id, None, None
+
+        tz_peking = datetime.timezone(datetime.timedelta(hours=8))
+        dt = dateutil.parser.parse(not_after_str)
+        if dt.tzinfo is None:
+            # 默认 API 返回的时间如果没有时区，按 UTC 解释
+            dt = dt.replace(tzinfo=datetime.timezone.utc)
+        online_expire_time = dt.astimezone(tz_peking)
+
+        # 计算剩余天数
+        now = datetime.datetime.now(tz_peking)
+        days_remaining = (online_expire_time - now).days
+
+        print(f"🔍 线上域名现有证书过期时间：{online_expire_time.strftime('%Y-%m-%d %H:%M:%S')}，剩余 {days_remaining} 天")
+        return cert_id, online_expire_time, days_remaining
+
+    except Exception as e:
+        print(f"⚠️  获取线上域名证书信息失败：{str(e)}")
+        return None, None, None
+
+
+def should_sync_cert(local_expire_time: datetime.datetime, online_expire_time: Optional[datetime.datetime], online_days_remaining: Optional[int]) -> bool:
     """
     判断是否执行同步：
-    - 若CERT_THRESHOLD_DAYS为None → 执行同步；
-    - 若为数字 → 剩余天数≤阈值时执行同步；
+    - 若线上现有证书为 None (未绑定或获取失败) → 执行同步
+    - 若线上现有证书存在，验证本地证书有效期必须大于线上现有证书，否则跳过/拒绝同步
+    - 若本地证书更新，且线上证书剩余天数 ≤ 阈值天数 → 执行同步，否则跳过
     """
+    if online_expire_time is None:
+        print("ℹ️  目标域名当前未绑定现有证书，执行同步")
+        return True
+
+    # 1. 验证本地证书的有效期必须大于目标域名现有证书
+    if local_expire_time <= online_expire_time:
+        print(f"ℹ️  本地证书过期时间（{local_expire_time.strftime('%Y-%m-%d %H:%M:%S')}）"
+              f"未大于线上现有证书过期时间（{online_expire_time.strftime('%Y-%m-%d %H:%M:%S')}），跳过同步")
+        return False
+
+    # 2. 检查阈值
     if Config.CERT_THRESHOLD_DAYS is None:
-        print("ℹ️  CERT_THRESHOLD_DAYS未配置，执行同步")
+        print("ℹ️  CERT_THRESHOLD_DAYS未配置，且本地证书比线上更新，执行同步")
         return True
 
     threshold = int(Config.CERT_THRESHOLD_DAYS)
+    if online_days_remaining is None:
+        print("⚠️  线上证书剩余天数无法计算，执行同步")
+        return True
 
-    _, days_total, days_remaining = get_cert_validity_info()
-    if days_remaining is None:
-        print("⚠️  证书有效期解析失败，跳过同步")
-        return False
-
-    if days_remaining <= threshold:
-        print(f"✅ 证书有效期{days_total}天，剩余{days_remaining}天≤阈值{threshold}天，执行同步")
+    if online_days_remaining <= threshold:
+        print(f"✅ 线上现有证书剩余天数{online_days_remaining}天 <= 阈值{threshold}天，且本地证书更长，执行同步")
         return True
     else:
-        print(f"ℹ️  证书有效期{days_total}天，剩余{days_remaining}天>阈值{threshold}天，跳过同步")
+        print(f"ℹ️  线上现有证书剩余天数{online_days_remaining}天 > 阈值{threshold}天，跳过同步")
         return False
 
 
@@ -271,10 +335,6 @@ def sync_certificate() -> None:
             raise Exception(config_msg)
         print(f"✅ {config_msg}")
 
-        # 根据阈值天数配置判断是否执行同步
-        if not should_sync_cert():
-            return
-
         # 初始化客户端
         print("\n===== 初始化火山引擎客户端 =====")
         cert_api, cert_runtime_options, tos_client = init_volc_clients()
@@ -284,6 +344,19 @@ def sync_certificate() -> None:
         print("\n===== 检查 TOS Bucket =====")
         if not check_tos_bucket(tos_client):
             raise Exception("TOS Bucket 校验失败，流程终止")
+
+        # 读取本地证书并获取本地过期时间
+        print("\n===== 获取本地证书过期时间 =====")
+        local_expire_time = get_local_cert_expire_time()
+        print(f"✅ 本地证书过期时间：{local_expire_time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+        # 获取线上目标域名的绑定证书时间
+        print("\n===== 获取目标域名现有证书信息 =====")
+        _, online_expire_time, online_days_remaining = get_online_domain_cert_info(tos_client, cert_api, cert_runtime_options)
+
+        # 根据配置与过期时间差判定是否执行同步
+        if not should_sync_cert(local_expire_time, online_expire_time, online_days_remaining):
+            return
 
         # 读取证书和私钥
         print("\n===== 读取证书并计算指纹 =====")
